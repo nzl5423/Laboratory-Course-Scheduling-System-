@@ -473,7 +473,20 @@ export default function App() {
       alert(`发现学生上课时间冲突，请先调整：\n${studentConflicts[0]}`);
       return;
     }
-    setGroups(groups.map(g => ({ ...g, assignments: calculateAssignments(g) })));
+    
+    setGroups(groups.map(g => {
+      const newAssignments = calculateAssignments(g);
+      if (g.assignments && g.assignments.length > 0) {
+        newAssignments.forEach((na, idx) => {
+          const oldAssign = g.assignments[idx];
+          if (oldAssign) {
+            na.labName = oldAssign.labName; // 保留用户修改过的实验室名称
+            na.teacherName = oldAssign.teacherName; // 保留用户选择的教师
+          }
+        });
+      }
+      return { ...g, assignments: newAssignments };
+    }));
     setStep(5);
   };
 
@@ -886,29 +899,45 @@ export default function App() {
     </div>
   );
 
-  const renderStep5 = () => (
-    <div className="max-w-5xl mx-auto py-12 px-6">
-      <StepNavigation step={5} onStepClick={handleStepClick} nextDisabled={!isAllTeachersAssigned} className="mt-0 mb-8" />
-      <div className="mb-12">
-        <h2 className="text-4xl font-medium tracking-tight mb-4">实验室分配</h2>
-        <p className="text-black/40 text-lg">系统已根据您的设置拆分实验室，请为每个实验室指定带教教师。</p>
+  const renderStep5 = () => {
+    const groupsByCourse = groups.reduce((acc, g) => {
+      if (!acc[g.courseName]) acc[g.courseName] = [];
+      acc[g.courseName].push(g);
+      return acc;
+    }, {} as Record<string, CombinedClassGroup[]>);
+
+    return (
+      <div className="max-w-5xl mx-auto py-12 px-6">
+        <StepNavigation step={5} onStepClick={handleStepClick} nextDisabled={!isAllTeachersAssigned} className="mt-0 mb-8" />
+        <div className="mb-12">
+          <h2 className="text-4xl font-medium tracking-tight mb-4">实验室和教师分配</h2>
+          <p className="text-black/40 text-lg">系统已根据您的设置拆分实验室，请为每个实验室指定带教教师。</p>
+        </div>
+        
+        <div className="space-y-12">
+          {Object.entries(groupsByCourse).map(([courseName, courseGroups]) => (
+            <div key={courseName} className="space-y-6">
+              <h3 className="text-2xl font-bold border-l-4 border-emerald-500 pl-4 py-1">{courseName}</h3>
+              <div className="space-y-6">
+                {courseGroups.map(group => (
+                  <TeacherAssignCard 
+                    key={group.id} 
+                    group={group} 
+                    teachers={teachers} 
+                    totalLabs={totalLabs}
+                    onUpdate={(u: any) => updateGroup(group.id, u)}
+                    checkConflict={checkTeacherConflict}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+        
+        <StepNavigation step={5} onStepClick={handleStepClick} nextDisabled={!isAllTeachersAssigned} className="mt-12" />
       </div>
-      
-      <div className="space-y-6">
-        {groups.map(group => (
-          <TeacherAssignCard 
-            key={group.id} 
-            group={group} 
-            teachers={teachers} 
-            onUpdate={(u: any) => updateGroup(group.id, u)}
-            checkConflict={checkTeacherConflict}
-          />
-        ))}
-      </div>
-      
-      <StepNavigation step={5} onStepClick={handleStepClick} nextDisabled={!isAllTeachersAssigned} className="mt-12" />
-    </div>
-  );
+    );
+  };
 
   const renderStep6 = () => {
     if (groups.length === 0) {
@@ -993,7 +1022,7 @@ export default function App() {
                       <th className="p-4 font-bold text-black/40 uppercase tracking-widest text-[10px]">时间</th>
                       <th className="p-4 font-bold text-black/40 uppercase tracking-widest text-[10px]">课程名称</th>
                       <th className="p-4 font-bold text-black/40 uppercase tracking-widest text-[10px]">班级</th>
-                      <th className="p-4 font-bold text-black/40 uppercase tracking-widest text-[10px]">实验室分配</th>
+                      <th className="p-4 font-bold text-black/40 uppercase tracking-widest text-[10px]">实验室和教师分配</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-black/5">
@@ -1190,7 +1219,7 @@ export default function App() {
             { id: 2, icon: UserPlus, label: '教师管理' },
             { id: 3, icon: LayoutGrid, label: '合班管理' },
             { id: 4, icon: Clock, label: '排课设置' },
-            { id: 5, icon: Split, label: '实验室分配' },
+            { id: 5, icon: Split, label: '实验室和教师分配' },
             { id: 6, icon: CheckCircle2, label: '完成导出' }
           ].map((s) => (
             <button
@@ -1313,7 +1342,7 @@ export default function App() {
                   <p>在“合班管理”中创建课程，并关联对应的班级。系统会自动计算总人数。在“排课设置”中，您可以为每个合班组设定具体的周次、星期和节次。系统会实时检测学生的时间冲突。</p>
                 </section>
                 <section>
-                  <h4 className="text-black font-bold mb-2">3. 实验室分配</h4>
+                  <h4 className="text-black font-bold mb-2">3. 实验室和教师分配</h4>
                   <p>根据基准人数，系统会自动将大班拆分为多个实验室。您需要为每个实验室指定一名带教教师。系统会检测教师的时间冲突，确保同一教师在同一时间不会出现在两个实验室。</p>
                 </section>
                 <section>
@@ -1470,10 +1499,33 @@ const TeachingGroupCard = ({ group, allClassNames, studentsPool, coursePool, onU
                     const count = studentsPool.filter((s: any) => s.className === className).length;
                     return (
                       <span key={className} className={cn(
-                        "px-3 py-1 rounded-full text-xs font-medium",
+                        "px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1",
                         count === 0 ? "bg-red-50 text-red-600 border border-red-100" : "bg-black/5 text-black"
                       )}>
                         {className} ({count}人)
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const newClassNames = group.classNames.filter((cn: string) => cn !== className);
+                            const newStudents = studentsPool.filter((s: any) => newClassNames.includes(s.className)).sort((a: any, b: any) => {
+                              const classCmp = a.className.localeCompare(b.className);
+                              if (classCmp !== 0) return classCmp;
+                              return a.id.localeCompare(b.id);
+                            });
+                            const newTotalStudents = newStudents.length;
+                            const newNumLabs = Math.max(1, Math.ceil(newTotalStudents / group.splitConfig.baseCapacity));
+                            
+                            onUpdate({
+                              classNames: newClassNames,
+                              totalStudents: newTotalStudents,
+                              students: newStudents,
+                              splitConfig: { ...group.splitConfig, numLabs: newNumLabs }
+                            });
+                          }}
+                          className="hover:text-red-500 transition-colors ml-1"
+                        >
+                          <X size={12} />
+                        </button>
                       </span>
                     );
                   })}
@@ -1657,16 +1709,18 @@ const TeachingGroupCard = ({ group, allClassNames, studentsPool, coursePool, onU
   );
 };
 
-const TeacherAssignCard = ({ group, teachers, onUpdate, checkConflict }: any) => {
+const TeacherAssignCard = ({ group, teachers, totalLabs, onUpdate, checkConflict }: any) => {
   return (
     <Card className="p-8">
-      <div className="flex items-center gap-4 mb-8">
-        <div className="w-12 h-12 bg-black text-white rounded-2xl flex items-center justify-center">
-          <BookOpen size={20} />
-        </div>
-        <div>
-          <h3 className="text-xl font-medium">{group.courseName}</h3>
-          <p className="text-black/40 text-sm">{WEEKDAYS[group.time.weekday-1]} {group.time.session}{group.time.period} · 共 {group.assignments.length} 个实验室</p>
+      <div className="border-b border-black/5 pb-6 mb-8">
+        <div className="flex items-center gap-4 mb-4">
+          <div className="w-12 h-12 bg-emerald-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-600/20">
+            <Users size={20} />
+          </div>
+          <div>
+            <h3 className="text-xl font-bold">上课班级：{group.classNames.join(', ')}</h3>
+            <p className="text-black/40 text-sm font-medium">共 {group.totalStudents} 人 · {WEEKDAYS[group.time.weekday-1]} {group.time.session}{group.time.period}</p>
+          </div>
         </div>
       </div>
 
@@ -1679,7 +1733,19 @@ const TeacherAssignCard = ({ group, teachers, onUpdate, checkConflict }: any) =>
               conflict ? "bg-red-50 border-red-100" : "bg-[#F5F5F5] border-transparent"
             )}>
               <div className="flex justify-between items-start mb-4">
-                <span className="text-xs font-bold uppercase tracking-wider text-black/40">{assign.labName}</span>
+                <select 
+                  className="text-xs font-bold uppercase tracking-wider text-black/40 bg-transparent border-none outline-none cursor-pointer hover:text-black"
+                  value={assign.labName}
+                  onChange={(e) => {
+                    const newAssigns = [...group.assignments];
+                    newAssigns[idx].labName = e.target.value;
+                    onUpdate({ assignments: newAssigns });
+                  }}
+                >
+                  {Array.from({ length: totalLabs || 10 }, (_, i) => `实验室${i + 1}`).map(name => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
                 <span className="text-xs font-medium bg-white px-2 py-1 rounded-lg shadow-sm">{assign.studentRange.count} 人</span>
               </div>
               
