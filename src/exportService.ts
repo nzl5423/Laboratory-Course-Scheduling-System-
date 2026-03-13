@@ -188,66 +188,87 @@ export const exportFullWorkbook = async (groups: CombinedClassGroup[], totalLabs
 
     courseGroups.forEach(group => {
       group.assignments.forEach(assign => {
-        // Header 1
-        gradeSheet.mergeCells(`A${gRow}:J${gRow}`);
-        const h1 = gradeSheet.getCell(`A${gRow}`);
-        h1.value = `${group.courseName} ${assign.labName}`;
+        // Row 1: Title (合并 14 列)
+        gradeSheet.mergeCells(gRow, 1, gRow, 14);
+        const h1 = gradeSheet.getCell(gRow, 1);
+        h1.value = `${group.courseName} ${assign.labName} 成绩单`;
         h1.font = { bold: true, size: 12 };
         applyDefaultStyle(h1);
         h1.alignment = { horizontal: 'left', vertical: 'middle' };
         gRow++;
 
-        // Header 2
+        // Row 2 & 3: 复杂表头
         const h2Row = gradeSheet.getRow(gRow);
+        const h3Row = gradeSheet.getRow(gRow + 1);
+
+        // 纵向合并：序号, 学号, 姓名
         ['序号', '学号', '姓名'].forEach((text, i) => {
-          const cell = h2Row.getCell(i + 1);
-          cell.value = text;
-          applyDefaultStyle(cell);
+          h2Row.getCell(i + 1).value = text;
+          applyDefaultStyle(h2Row.getCell(i + 1));
+          applyDefaultStyle(h3Row.getCell(i + 1));
           gradeSheet.mergeCells(gRow, i + 1, gRow + 1, i + 1);
         });
-        
-        gradeSheet.mergeCells(gRow, 4, gRow, 9);
+
+        // 横向合并：成绩 (跨 9 列: 第 4 到 第 12 列)
+        gradeSheet.mergeCells(gRow, 4, gRow, 12);
         const scoreCell = h2Row.getCell(4);
         scoreCell.value = '成绩';
         applyDefaultStyle(scoreCell);
 
-        const remarkHeader = h2Row.getCell(10);
-        remarkHeader.value = '班级备注';
-        applyDefaultStyle(remarkHeader);
-        gradeSheet.mergeCells(gRow, 10, gRow + 1, 10);
-        gRow++;
-
-        // Header 3
-        const h3Row = gradeSheet.getRow(gRow);
-        ['1', '2.0', '3.0', '4.0', '5.0', '备注'].forEach((text, i) => {
-          const cell = h3Row.getCell(i + 4);
-          cell.value = text;
+        // 成绩子表头：1 到 9 整数
+        for(let i = 1; i <= 9; i++) {
+          const cell = h3Row.getCell(i + 3);
+          cell.value = i.toString();
           applyDefaultStyle(cell);
-        });
-        gRow++;
+          applyDefaultStyle(h2Row.getCell(i + 3)); // 补充上方合并单元格的边框
+        }
 
-        // Data Rows (Sorted by Class then ID)
+        // 纵向合并：班级 (第 13 列)
+        h2Row.getCell(13).value = '班级';
+        applyDefaultStyle(h2Row.getCell(13));
+        applyDefaultStyle(h3Row.getCell(13));
+        gradeSheet.mergeCells(gRow, 13, gRow + 1, 13);
+
+        // 纵向合并：备注 (第 14 列)
+        h2Row.getCell(14).value = '备注';
+        applyDefaultStyle(h2Row.getCell(14));
+        applyDefaultStyle(h3Row.getCell(14));
+        gradeSheet.mergeCells(gRow, 14, gRow + 1, 14);
+
+        gRow += 2;
+
+        // Data Rows (严格按班级+学号排序)
         const sortedStudents = sortStudents(assign.studentRange.studentList);
         sortedStudents.forEach((student, idx) => {
-          const row = gradeSheet.addRow([idx + 1, student.id, student.name, '', '', '', '', '', '', '']);
+          const rowData = [
+            idx + 1, 
+            student.id, 
+            student.name, 
+            '', '', '', '', '', '', '', '', '', // 9个空的成绩列
+            student.className, // 填入真实的班级名称
+            '' // 最后的空备注
+          ];
+          const row = gradeSheet.addRow(rowData);
           row.eachCell(cell => applyDefaultStyle(cell));
           gRow++;
         });
 
-        // Footer
-        gradeSheet.mergeCells(`A${gRow}:J${gRow}`);
-        const footer = gradeSheet.getCell(`A${gRow}`);
-        footer.value = `上课时间：${group.time.startWeek}-${group.time.endWeek}周 ${WEEKDAYS[group.time.weekday - 1]} ${group.time.session}${group.time.period} ${assign.teacherName}`;
+        // Footer (合并 14 列)
+        gradeSheet.mergeCells(gRow, 1, gRow, 14);
+        const footer = gradeSheet.getCell(gRow, 1);
+        footer.value = `上课时间：${group.time.startWeek}-${group.time.endWeek}周 ${WEEKDAYS[group.time.weekday - 1]} ${group.time.session} ${group.time.period}   带教教师：${assign.teacherName}`;
         applyDefaultStyle(footer);
         footer.alignment = { horizontal: 'left', vertical: 'middle' };
-        gRow++;
-
-        gRow += 3; // Spacer
+        gRow += 4; // 留 3 行空白作为间隔
       });
     });
-    gradeSheet.getColumn(2).width = 15;
-    gradeSheet.getColumn(3).width = 12;
-    gradeSheet.getColumn(10).width = 15;
+
+    // 设置列宽
+    gradeSheet.getColumn(2).width = 15; // 学号
+    gradeSheet.getColumn(3).width = 12; // 姓名
+    gradeSheet.getColumn(13).width = 20; // 班级
+    gradeSheet.getColumn(14).width = 15; // 备注
+    for(let i = 4; i <= 12; i++) gradeSheet.getColumn(i).width = 5; // 成绩列调窄
 
     // --- Dynamic Sheet B: [Course Name]座位安排表 ---
     const seatSheet = workbook.addWorksheet(`${courseName}座位安排表`);

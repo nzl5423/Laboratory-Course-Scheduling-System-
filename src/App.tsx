@@ -1100,16 +1100,14 @@ export default function App() {
                           <th rowSpan={2} className="p-2 border border-black/10 text-center w-10">序号</th>
                           <th rowSpan={2} className="p-2 border border-black/10 text-center w-32">学号</th>
                           <th rowSpan={2} className="p-2 border border-black/10 text-center w-24">姓名</th>
-                          <th colSpan={6} className="p-1 border border-black/10 text-center">成绩</th>
-                          <th rowSpan={2} className="p-2 border border-black/10 text-center w-32">班级备注</th>
+                          <th colSpan={9} className="p-1 border border-black/10 text-center">成绩</th>
+                          <th rowSpan={2} className="p-2 border border-black/10 text-center w-32">班级</th>
+                          <th rowSpan={2} className="p-2 border border-black/10 text-center w-24">备注</th>
                         </tr>
                         <tr className="bg-[#F5F5F5]">
-                          <th className="p-1 border border-black/10 text-center w-8">1</th>
-                          <th className="p-1 border border-black/10 text-center w-10">2.0</th>
-                          <th className="p-1 border border-black/10 text-center w-10">3.0</th>
-                          <th className="p-1 border border-black/10 text-center w-10">4.0</th>
-                          <th className="p-1 border border-black/10 text-center w-10">5.0</th>
-                          <th className="p-1 border border-black/10 text-center">备注</th>
+                          {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => (
+                            <th key={n} className="p-1 border border-black/10 text-center w-8">{n}</th>
+                          ))}
                         </tr>
                       </thead>
                       <tbody>
@@ -1118,13 +1116,11 @@ export default function App() {
                             <td className="p-2 border border-black/10 text-center">{i + 1}</td>
                             <td className="p-2 border border-black/10 font-mono text-center">{s.id}</td>
                             <td className="p-2 border border-black/10 font-medium text-center">{s.name}</td>
-                            <td className="p-2 border border-black/10"></td>
-                            <td className="p-2 border border-black/10"></td>
-                            <td className="p-2 border border-black/10"></td>
-                            <td className="p-2 border border-black/10"></td>
-                            <td className="p-2 border border-black/10"></td>
-                            <td className="p-2 border border-black/10"></td>
+                            {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => (
+                              <td key={n} className="p-2 border border-black/10"></td>
+                            ))}
                             <td className="p-2 border border-black/10 text-center text-[10px] text-black/40">{s.className}</td>
+                            <td className="p-2 border border-black/10"></td>
                           </tr>
                         ))}
                       </tbody>
