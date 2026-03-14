@@ -774,11 +774,6 @@ export default function App() {
       </div>
       
       <StepNavigation step={1} onStepClick={handleStepClick} nextDisabled={students.length === 0} className="mt-12" />
-      
-      <div className="mt-12 pt-8 border-t border-black/5 w-full max-w-md mx-auto text-center">
-        <p className="text-[10px] text-black/20 font-bold uppercase tracking-widest mb-1">© 2026 LAB SCHEDULER · 极简高效的实验室排课方案</p>
-        <p className="text-[9px] text-black/10 font-medium">Designed by nzl5423.</p>
-      </div>
     </div>
   );
 
@@ -1152,28 +1147,32 @@ export default function App() {
                 <table className="w-full text-sm text-left border-collapse">
                   <thead>
                     <tr className="bg-[#F5F5F5] border-b border-black/5">
-                      <th className="p-4 font-bold text-black/40 uppercase tracking-widest text-xs">上课周数</th>
-                      <th className="p-4 font-bold text-black/40 uppercase tracking-widest text-xs">星期</th>
-                      <th className="p-4 font-bold text-black/40 uppercase tracking-widest text-xs">节次</th>
-                      <th className="p-4 font-bold text-black/40 uppercase tracking-widest text-xs">课程名称</th>
-                      <th className="p-4 font-bold text-black/40 uppercase tracking-widest text-xs">班级</th>
-                      <th className="p-4 font-bold text-black/40 uppercase tracking-widest text-xs">实验室和教师分配</th>
+                      <th className="p-4 font-bold text-black/40 uppercase tracking-widest text-xs border-r border-black/5">上课周数</th>
+                      <th className="p-4 font-bold text-black/40 uppercase tracking-widest text-xs border-r border-black/5">星期</th>
+                      <th className="p-4 font-bold text-black/40 uppercase tracking-widest text-xs border-r border-black/5">节次</th>
+                      <th className="p-4 font-bold text-black/40 uppercase tracking-widest text-xs border-r border-black/5">课程名称</th>
+                      <th className="p-4 font-bold text-black/40 uppercase tracking-widest text-xs border-r border-black/5">班级</th>
+                      {Array.from({ length: totalLabs }).map((_, i) => (
+                        <th key={i} className="p-4 font-bold text-black/40 uppercase tracking-widest text-xs border-r border-black/5">
+                          实验室{i + 1}
+                        </th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-black/5">
                     {[...groups].sort((a, b) => a.time.weekday - b.time.weekday).map(group => (
                       <tr key={group.id} className="hover:bg-black/[0.02] transition-colors">
-                        <td className="p-4 whitespace-nowrap font-medium">
+                        <td className="p-4 whitespace-nowrap font-medium border-r border-black/5">
                           {group.time.startWeek}-{group.time.endWeek}周
                         </td>
-                        <td className="p-4 whitespace-nowrap">
+                        <td className="p-4 whitespace-nowrap border-r border-black/5">
                           <div className="font-medium">{WEEKDAYS[group.time.weekday-1]}</div>
                         </td>
-                        <td className="p-4 whitespace-nowrap">
+                        <td className="p-4 whitespace-nowrap border-r border-black/5">
                           <div className="text-xs text-black/40">{group.time.session} {group.time.period}</div>
                         </td>
-                        <td className="p-4 font-medium">{group.courseName}</td>
-                        <td className="p-4">
+                        <td className="p-4 font-medium border-r border-black/5">{group.courseName}</td>
+                        <td className="p-4 border-r border-black/5">
                           <div className="text-xs font-medium">
                             {group.classNames.join(',')} {(() => {
                               const counts: Record<string, number> = {};
@@ -1182,16 +1181,20 @@ export default function App() {
                             })()}={group.totalStudents}人
                           </div>
                         </td>
-                        <td className="p-4">
-                          <div className="flex flex-wrap gap-2">
-                            {group.assignments.map((a, i) => (
-                              <div key={i} className="px-2 py-1 bg-black/5 rounded-lg text-[10px] flex flex-col">
-                                <span className="font-bold text-black/40">{a.labName}</span>
-                                <span className="font-medium">{a.teacherName}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </td>
+                        {Array.from({ length: totalLabs }).map((_, i) => {
+                          const labName = `实验室${i + 1}`;
+                          const assignment = group.assignments.find((a: any) => a.labName === labName);
+                          return (
+                            <td key={i} className="p-4 border-r border-black/5">
+                              {assignment ? (
+                                <div className="flex flex-col">
+                                  <span className="font-bold text-emerald-600">{assignment.teacherName || '未分配'}</span>
+                                  <span className="text-[10px] text-black/40">{assignment.studentRange.count}人</span>
+                                </div>
+                              ) : '-'}
+                            </td>
+                          );
+                        })}
                       </tr>
                     ))}
                   </tbody>
@@ -1483,6 +1486,12 @@ export default function App() {
             {step === 6 && renderStep6()}
           </motion.div>
         </AnimatePresence>
+
+        <div className="mt-auto py-12 text-center border-t border-black/5">
+          <p className="text-[10px] text-black/20 font-bold uppercase tracking-widest">
+            © 2026 LAB SCHEDULER · 极简高效的实验室排课方案 Designed By nzl5423
+          </p>
+        </div>
       </div>
 
       {/* Modals */}
@@ -1920,6 +1929,9 @@ const TeacherAssignCard = ({ group, teachers, totalLabs, onUpdate, checkConflict
                     if (isAlreadySelected) return null;
                     return <option key={t.name} value={t.name}>{t.name}</option>;
                   })}
+                  {assign.teacherName && !teachers.some((t: any) => t.name === assign.teacherName) && (
+                    <option value={assign.teacherName}>{assign.teacherName} (已从库中删除)</option>
+                  )}
                 </select>
 
                 {conflict && (
