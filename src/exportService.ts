@@ -59,7 +59,6 @@ export const exportFullWorkbook = async (groups: CombinedClassGroup[], totalLabs
   applyDefaultStyle(s1Title);
 
   const s1Headers = ['上课周数', '星期', '节次', '学科', '班级'];
-  // We want Lab 1 to Lab N from left to right for consistency
   for (let i = 1; i <= totalLabs; i++) s1Headers.push(`实验室${i}`);
   const s1HeaderRow = sheet1.addRow(s1Headers);
   s1HeaderRow.eachCell((cell) => {
@@ -78,7 +77,6 @@ export const exportFullWorkbook = async (groups: CombinedClassGroup[], totalLabs
   sortedGroups.forEach((group, index) => {
     const currentWeekday = WEEKDAYS[group.time.weekday - 1] || `星期${group.time.weekday}`;
     
-    // Format: Class1,Class2 32+30=62人
     const countsByClass: { [key: string]: number } = {};
     group.students.forEach(s => {
       countsByClass[s.className] = (countsByClass[s.className] || 0) + 1;
@@ -95,12 +93,11 @@ export const exportFullWorkbook = async (groups: CombinedClassGroup[], totalLabs
     const rowData = [
       `${group.time?.startWeek || 1}-${group.time?.endWeek || 16}周`,
       currentWeekday,
-      `${group.time?.session || '未知'}${group.time?.period || '未知节次'}`,
+      `${group.time?.session || ''}${group.time?.period || ''}`,
       group.courseName || '未命名课程',
       classInfo
     ];
 
-    // Match labs 1 to totalLabs
     for (let i = 1; i <= totalLabs; i++) {
       const labName = `实验室${i}`;
       const assignment = group.assignments.find(a => a.labName === labName);
@@ -110,7 +107,6 @@ export const exportFullWorkbook = async (groups: CombinedClassGroup[], totalLabs
     const row = sheet1.addRow(rowData);
     row.eachCell(cell => applyDefaultStyle(cell));
 
-    // Vertical merge for Weekday
     if (index > 0 && currentWeekday !== lastWeekday) {
       if (mergeStartRow < row.number - 1) {
         sheet1.mergeCells(mergeStartRow, 2, row.number - 1, 2);
