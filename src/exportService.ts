@@ -44,7 +44,7 @@ export const exportFullWorkbook = async (groups: CombinedClassGroup[], totalLabs
   s1Title.font = { size: 14, bold: true };
   applyDefaultStyle(s1Title);
 
-  const s1Headers = ['星期', '节次', '周次', '学科', '班级'];
+  const s1Headers = ['上课周数', '星期', '节次', '学科', '班级'];
   for (let i = totalLabs; i >= 1; i--) s1Headers.push(`实验室${i}`);
   const s1HeaderRow = sheet1.addRow(s1Headers);
   s1HeaderRow.eachCell((cell) => {
@@ -55,7 +55,9 @@ export const exportFullWorkbook = async (groups: CombinedClassGroup[], totalLabs
   let lastWeekday = '';
   let mergeStartRow = 3;
 
-  groups.forEach((group, index) => {
+  const sortedGroups = [...groups].sort((a, b) => a.time.weekday - b.time.weekday);
+
+  sortedGroups.forEach((group, index) => {
     const currentWeekday = WEEKDAYS[group.time.weekday - 1];
     
     // Format: Class1,Class2 Count1+Count2=Total
@@ -67,9 +69,9 @@ export const exportFullWorkbook = async (groups: CombinedClassGroup[], totalLabs
     const classInfo = `${group.classNames.join(',')} ${countsStr}=${group.totalStudents}人`;
     
     const rowData = [
+      `${group.time.startWeek}-${group.time.endWeek}周`,
       currentWeekday,
       `${group.time.session}${group.time.period}`,
-      `${group.time.startWeek}-${group.time.endWeek}周`,
       group.courseName,
       classInfo
     ];
@@ -86,18 +88,19 @@ export const exportFullWorkbook = async (groups: CombinedClassGroup[], totalLabs
     // Vertical merge for Weekday
     if (index > 0 && currentWeekday !== lastWeekday) {
       if (mergeStartRow < row.number - 1) {
-        sheet1.mergeCells(mergeStartRow, 1, row.number - 1, 1);
+        sheet1.mergeCells(mergeStartRow, 2, row.number - 1, 2);
       }
       mergeStartRow = row.number;
     }
-    if (index === groups.length - 1) {
+    if (index === sortedGroups.length - 1) {
       if (mergeStartRow < row.number) {
-        sheet1.mergeCells(mergeStartRow, 1, row.number, 1);
+        sheet1.mergeCells(mergeStartRow, 2, row.number, 2);
       }
     }
     lastWeekday = currentWeekday;
   });
 
+  sheet1.getColumn(1).width = 12;
   sheet1.getColumn(4).width = 20;
   sheet1.getColumn(5).width = 35;
   for (let i = 6; i <= 5 + totalLabs; i++) sheet1.getColumn(i).width = 12;

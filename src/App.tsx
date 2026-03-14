@@ -149,6 +149,8 @@ export default function App() {
   const [activeAssignIdx, setActiveAssignIdx] = useState(0);
   const [manualStudent, setManualStudent] = useState({ id: '', name: '', className: '' });
   const [showManualStudent, setShowManualStudent] = useState(false);
+  const [manualAddMode, setManualAddMode] = useState<'single' | 'batch'>('single');
+  const [batchStudentInput, setBatchStudentInput] = useState('');
   const [teacherInput, setTeacherInput] = useState('');
   const [courseInput, setCourseInput] = useState('');
 
@@ -571,6 +573,32 @@ export default function App() {
     setShowManualStudent(false);
   };
 
+  const handleRemoveClass = (className: string) => {
+    const newStudents = students.filter(s => s.className !== className);
+    setStudents(newStudents);
+    
+    const updatedGroups = groups.map(group => {
+      if (!group.classNames.includes(className)) return group;
+      
+      const newClassNames = group.classNames.filter(cn => cn !== className);
+      const groupStudents = newStudents.filter(s => newClassNames.includes(s.className)).sort((a, b) => {
+        const classCmp = a.className.localeCompare(b.className);
+        if (classCmp !== 0) return classCmp;
+        return a.id.localeCompare(b.id);
+      });
+      
+      return {
+        ...group,
+        classNames: newClassNames,
+        totalStudents: groupStudents.length,
+        students: groupStudents,
+        invalidClasses: newClassNames.filter(cn => !newStudents.some(s => s.className === cn))
+      };
+    });
+    setGroups(updatedGroups);
+    toast.success(`已删除班级: ${className}`);
+  };
+
   // --- Render Steps ---
   const renderStep1 = () => (
     <div className="max-w-4xl mx-auto py-12 px-6">
@@ -605,30 +633,98 @@ export default function App() {
       
       {showManualStudent && (
         <Card className="p-6 mb-6 bg-emerald-50/50 border-emerald-100">
-          <h3 className="text-sm font-bold uppercase tracking-widest text-emerald-800 mb-4">手动添加学生</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-            <input 
-              type="text" placeholder="学号" 
-              className="p-3 rounded-xl border border-emerald-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-              value={manualStudent.id}
-              onChange={e => setManualStudent({...manualStudent, id: e.target.value})}
-            />
-            <input 
-              type="text" placeholder="姓名" 
-              className="p-3 rounded-xl border border-emerald-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-              value={manualStudent.name}
-              onChange={e => setManualStudent({...manualStudent, name: e.target.value})}
-            />
-            <input 
-              type="text" placeholder="班级" 
-              className="p-3 rounded-xl border border-emerald-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-              value={manualStudent.className}
-              onChange={e => setManualStudent({...manualStudent, className: e.target.value})}
-            />
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-sm font-bold uppercase tracking-widest text-emerald-800">手动添加学生</h3>
+            <div className="flex bg-white/50 p-1 rounded-xl border border-emerald-200">
+              <button 
+                onClick={() => setManualAddMode('single')}
+                className={cn(
+                  "px-4 py-1.5 rounded-lg text-xs font-bold transition-all",
+                  manualAddMode === 'single' ? "bg-emerald-500 text-white shadow-sm" : "text-emerald-800/40 hover:text-emerald-800"
+                )}
+              >
+                单人录入
+              </button>
+              <button 
+                onClick={() => setManualAddMode('batch')}
+                className={cn(
+                  "px-4 py-1.5 rounded-lg text-xs font-bold transition-all",
+                  manualAddMode === 'batch' ? "bg-emerald-500 text-white shadow-sm" : "text-emerald-800/40 hover:text-emerald-800"
+                )}
+              >
+                批量录入
+              </button>
+            </div>
           </div>
+
+          {manualAddMode === 'single' ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <input 
+                type="text" placeholder="学号" 
+                className="p-3 rounded-xl border border-emerald-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                value={manualStudent.id}
+                onChange={e => setManualStudent({...manualStudent, id: e.target.value})}
+              />
+              <input 
+                type="text" placeholder="姓名" 
+                className="p-3 rounded-xl border border-emerald-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                value={manualStudent.name}
+                onChange={e => setManualStudent({...manualStudent, name: e.target.value})}
+              />
+              <input 
+                type="text" placeholder="班级" 
+                className="p-3 rounded-xl border border-emerald-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                value={manualStudent.className}
+                onChange={e => setManualStudent({...manualStudent, className: e.target.value})}
+              />
+            </div>
+          ) : (
+            <div className="mb-4">
+              <textarea 
+                placeholder="输入学生信息，格式：学号 姓名 班级 (每行一个，空格或逗号分隔)"
+                className="w-full h-40 p-4 rounded-xl border border-emerald-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 resize-none"
+                value={batchStudentInput}
+                onChange={e => setBatchStudentInput(e.target.value)}
+              />
+            </div>
+          )}
+
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setShowManualStudent(false)} className="px-4 py-2 text-xs">取消</Button>
-            <Button onClick={handleManualAddStudent} className="px-4 py-2 text-xs">确认添加</Button>
+            <Button 
+              onClick={() => {
+                if (manualAddMode === 'single') {
+                  handleManualAddStudent();
+                } else {
+                  if (!batchStudentInput.trim()) return;
+                  const lines = batchStudentInput.split('\n').map(l => l.trim()).filter(Boolean);
+                  const newStudents: Student[] = [];
+                  lines.forEach(line => {
+                    const parts = line.split(/[\s,，]+/).filter(Boolean);
+                    if (parts.length >= 3) {
+                      newStudents.push({
+                        id: parts[0],
+                        name: parts[1],
+                        className: parts[2],
+                        gender: '未知',
+                        major: '未知'
+                      });
+                    }
+                  });
+                  if (newStudents.length > 0) {
+                    setStudents([...students, ...newStudents]);
+                    toast.success(`已成功批量添加 ${newStudents.length} 位学生`);
+                    setBatchStudentInput('');
+                    setShowManualStudent(false);
+                  } else {
+                    toast.error('输入格式不正确，请确保包含：学号 姓名 班级');
+                  }
+                }
+              }} 
+              className="px-4 py-2 text-xs"
+            >
+              确认添加
+            </Button>
           </div>
         </Card>
       )}
@@ -647,14 +743,20 @@ export default function App() {
         {students.length > 0 && (
           <Card className="p-6 bg-white">
             <h3 className="text-sm font-bold uppercase tracking-widest text-black/30 mb-4">班级概览</h3>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            <div className="flex flex-wrap gap-2">
               {Array.from(new Set(students.map(s => s.className))).sort().map(className => {
                 const count = students.filter(s => s.className === className).length;
                 return (
-                  <div key={className} className="px-3 py-2 bg-[#F5F5F5] rounded-xl flex justify-between items-center">
-                    <span className="text-sm font-medium truncate mr-2">{className}</span>
-                    <span className="text-xs text-black/40 shrink-0">({count}人)</span>
-                  </div>
+                  <span key={className} className="bg-emerald-50 text-emerald-600 px-3 py-1.5 rounded-full text-sm flex items-center gap-1.5 font-medium group transition-all hover:bg-emerald-100 shadow-sm">
+                    {className}
+                    <span className="text-[10px] opacity-50">({count}人)</span>
+                    <button 
+                      onClick={() => handleRemoveClass(className)}
+                      className="hover:text-red-500 transition-colors"
+                    >
+                      <X size={14} />
+                    </button>
+                  </span>
                 );
               })}
             </div>
@@ -674,8 +776,8 @@ export default function App() {
       <StepNavigation step={1} onStepClick={handleStepClick} nextDisabled={students.length === 0} className="mt-12" />
       
       <div className="mt-12 pt-8 border-t border-black/5 w-full max-w-md mx-auto text-center">
-        <p className="text-[10px] text-black/20 font-bold uppercase tracking-widest mb-2">© 2026 Lab Scheduler · 极简高效的实验室排课方案</p>
-        <p className="text-[9px] text-black/10 font-medium">Designed for modern laboratory management with precision and ease.</p>
+        <p className="text-[10px] text-black/20 font-bold uppercase tracking-widest mb-1">© 2026 LAB SCHEDULER · 极简高效的实验室排课方案</p>
+        <p className="text-[9px] text-black/10 font-medium">Designed by nzl5423.</p>
       </div>
     </div>
   );
@@ -699,23 +801,38 @@ export default function App() {
         <Card className="p-8">
           <h3 className="text-xl font-medium mb-6 flex items-center gap-2"><UserPlus size={20} /> 快速录入</h3>
           <div className="space-y-4">
-            <div className="relative">
-              <input 
-                type="text"
-                placeholder="输入教师姓名并按回车..."
-                className="w-full px-4 py-3 rounded-xl border border-black/10 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+            <div className="flex flex-col gap-3">
+              <textarea 
+                placeholder="输入教师姓名，每行一个..."
+                className="w-full h-32 px-4 py-3 rounded-xl border border-black/10 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 resize-none text-sm"
                 value={teacherInput}
                 onChange={(e) => setTeacherInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && teacherInput.trim()) {
-                    if (!teachers.some(t => t.name === teacherInput.trim())) {
-                      setTeachers([...teachers, { name: teacherInput.trim() }]);
+              />
+              <Button 
+                onClick={() => {
+                  if (teacherInput.trim()) {
+                    const names = teacherInput.split('\n').map(n => n.trim()).filter(Boolean);
+                    const newTeachers = [...teachers];
+                    let addedCount = 0;
+                    names.forEach(name => {
+                      if (!newTeachers.some(t => t.name === name)) {
+                        newTeachers.push({ name });
+                        addedCount++;
+                      }
+                    });
+                    if (addedCount > 0) {
+                      setTeachers(newTeachers);
+                      toast.success(`已成功添加 ${addedCount} 位教师`);
+                    } else {
+                      toast.error('教师已存在或输入无效');
                     }
                     setTeacherInput('');
                   }
                 }}
-              />
-              <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-black/20 uppercase tracking-widest pointer-events-none">Enter</div>
+                className="w-full py-3"
+              >
+                批量添加
+              </Button>
             </div>
             
             <div className="mt-6 pt-6 border-t border-black/5">
@@ -774,26 +891,36 @@ export default function App() {
       
       <div className="grid grid-cols-1 gap-8">
         <Card className="p-8">
-          <div className="flex gap-4 mb-8">
-            <div className="flex-1 relative">
-              <input 
-                type="text"
-                placeholder="输入课程名称并按回车..."
-                className="w-full px-4 py-3 rounded-xl border border-black/10 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                value={courseInput}
-                onChange={(e) => setCourseInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && courseInput.trim()) {
-                    const name = courseInput.trim();
+          <div className="flex flex-col gap-3 mb-8">
+            <textarea 
+              placeholder="输入课程名称，每行一个..."
+              className="w-full h-32 px-4 py-3 rounded-xl border border-black/10 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 resize-none text-sm"
+              value={courseInput}
+              onChange={(e) => setCourseInput(e.target.value)}
+            />
+            <Button 
+              onClick={() => {
+                if (courseInput.trim()) {
+                  const names = courseInput.split('\n').map(n => n.trim()).filter(Boolean);
+                  let addedCount = 0;
+                  names.forEach(name => {
                     if (!groups.some(g => g.courseName === name)) {
                       addGroup(createGroupObject(name, []));
+                      addedCount++;
                     }
-                    setCourseInput('');
+                  });
+                  if (addedCount > 0) {
+                    toast.success(`已成功添加 ${addedCount} 门课程`);
+                  } else {
+                    toast.error('课程已存在或输入无效');
                   }
-                }}
-              />
-              <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-black/20 uppercase tracking-widest pointer-events-none">Enter</div>
-            </div>
+                  setCourseInput('');
+                }
+              }}
+              className="w-full py-3"
+            >
+              批量添加
+            </Button>
           </div>
           
           <div className="mb-6 flex items-center justify-between">
@@ -1025,17 +1152,24 @@ export default function App() {
                 <table className="w-full text-sm text-left border-collapse">
                   <thead>
                     <tr className="bg-[#F5F5F5] border-b border-black/5">
-                      <th className="p-4 font-bold text-black/40 uppercase tracking-widest text-xs">时间</th>
+                      <th className="p-4 font-bold text-black/40 uppercase tracking-widest text-xs">上课周数</th>
+                      <th className="p-4 font-bold text-black/40 uppercase tracking-widest text-xs">星期</th>
+                      <th className="p-4 font-bold text-black/40 uppercase tracking-widest text-xs">节次</th>
                       <th className="p-4 font-bold text-black/40 uppercase tracking-widest text-xs">课程名称</th>
                       <th className="p-4 font-bold text-black/40 uppercase tracking-widest text-xs">班级</th>
                       <th className="p-4 font-bold text-black/40 uppercase tracking-widest text-xs">实验室和教师分配</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-black/5">
-                    {groups.map(group => (
+                    {[...groups].sort((a, b) => a.time.weekday - b.time.weekday).map(group => (
                       <tr key={group.id} className="hover:bg-black/[0.02] transition-colors">
+                        <td className="p-4 whitespace-nowrap font-medium">
+                          {group.time.startWeek}-{group.time.endWeek}周
+                        </td>
                         <td className="p-4 whitespace-nowrap">
                           <div className="font-medium">{WEEKDAYS[group.time.weekday-1]}</div>
+                        </td>
+                        <td className="p-4 whitespace-nowrap">
                           <div className="text-xs text-black/40">{group.time.session} {group.time.period}</div>
                         </td>
                         <td className="p-4 font-medium">{group.courseName}</td>
@@ -1100,7 +1234,7 @@ export default function App() {
                         <span>学生人数: <span className="text-black font-medium">{activeAssign.studentRange.count} 人</span></span>
                       </div>
                     </div>
-                    <div className="overflow-auto max-h-[600px] border border-black/5 rounded-xl shadow-inner bg-white">
+                    <div className="border border-black/5 rounded-xl shadow-inner bg-white">
                       <table className="w-full text-[11px] border-collapse">
                         <thead className="sticky top-0 bg-gray-50 z-10 shadow-sm">
                           <tr className="bg-gray-50">
@@ -1201,8 +1335,6 @@ export default function App() {
               </div>
             )}
           </div>
-
-          <Button variant="ghost" onClick={handleReset} icon={RotateCcw}>重置系统</Button>
         </div>
         <StepNavigation step={6} onStepClick={handleStepClick} className="mt-12" />
       </div>
@@ -1213,8 +1345,8 @@ export default function App() {
     <div className="flex min-h-screen bg-white">
       <Toaster position="top-center" toastOptions={{ style: { borderRadius: '12px' } }} />
       {/* Navigation Rail */}
-      <div className="w-16 md:w-20 border-r border-black/5 flex flex-col items-center py-6 gap-6 sticky top-0 h-screen bg-white z-50 shrink-0">
-        <div className="flex flex-col gap-4 flex-1">
+      <div className="w-16 md:w-20 border-r border-black/5 flex flex-col items-center py-6 sticky top-0 h-screen bg-white z-50 shrink-0">
+        <div className="flex flex-col gap-4 mb-auto">
           {[
             { id: 1, icon: Upload, label: '上传名单' },
             { id: 2, icon: UserPlus, label: '教师管理' },
@@ -1240,7 +1372,7 @@ export default function App() {
           ))}
         </div>
 
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-3 mt-8">
           <button 
             onClick={() => setShowAIChat(true)}
             className="w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl flex items-center justify-center text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50 transition-all group relative"
@@ -1282,21 +1414,6 @@ export default function App() {
               重置系统
             </div>
           </button>
-          
-          <button 
-            onClick={() => setShowInfo(true)}
-            className="w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl flex items-center justify-center text-black/20 hover:text-emerald-600 hover:bg-emerald-50 transition-all group relative"
-          >
-            <Info size={18} />
-            <div className="absolute left-full ml-4 px-3 py-2 bg-emerald-600 text-white rounded-xl text-xs font-medium opacity-0 group-hover:opacity-100 transition-all pointer-events-none whitespace-nowrap z-[100] translate-x-[-10px] group-hover:translate-x-0 shadow-xl">
-              <div className="absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 bg-emerald-600 rotate-45" />
-              关于系统
-            </div>
-          </button>
-        </div>
-
-        <div className="mt-4 text-xs text-black/10 font-bold uppercase tracking-tighter vertical-text select-none">
-          © 2026 Lab Scheduler
         </div>
       </div>
 
@@ -1326,9 +1443,27 @@ export default function App() {
               可用实验室: {totalLabs} 间
             </div>
           </div>
-          <div className="text-[10px] font-bold uppercase tracking-widest text-black/20 flex items-center gap-2">
-            <Calendar size={12} />
-            {new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })}
+          <div className="flex items-center gap-4 text-[10px] font-bold uppercase tracking-widest text-black/20">
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={() => setShowInfo(true)}
+                className="hover:text-emerald-600 transition-colors"
+              >
+                帮助信息
+              </button>
+              <span className="text-black/5">|</span>
+              <a 
+                href="mailto:nzl5423@163.com"
+                className="hover:text-emerald-600 transition-colors"
+              >
+                联系我们
+              </a>
+            </div>
+            <span className="text-black/5">|</span>
+            <div className="flex items-center gap-2">
+              <Calendar size={12} />
+              {new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })}
+            </div>
           </div>
         </div>
 
@@ -1659,39 +1794,33 @@ const TeachingGroupCard = ({ group, allClassNames, studentsPool, coursePool, onU
             </div>
           </div>
 
-          <details className="group">
-            <summary className="text-xs font-bold uppercase tracking-widest text-black/40 cursor-pointer hover:text-black transition-colors flex items-center gap-2 list-none">
-              <Settings size={12} className="group-open:rotate-90 transition-transform" />
-              高级设置 (座位排版)
-            </summary>
-            <div className="pt-4 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-black/40">列数 (默认4)</label>
-                  <input 
-                    type="number" min="1" max="10" 
-                    className="w-full p-2 bg-white rounded-lg text-xs font-medium focus:outline-none"
-                    value={group.splitConfig.columns || 4}
-                    onChange={(e) => onUpdate({ splitConfig: { ...group.splitConfig, columns: Number(e.target.value) } })}
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-black/40">每列 (默认8)</label>
-                  <input 
-                    type="number" min="1" max="20" 
-                    className="w-full p-2 bg-white rounded-lg text-xs font-medium focus:outline-none"
-                    value={group.splitConfig.rows || 8}
-                    onChange={(e) => onUpdate({ splitConfig: { ...group.splitConfig, rows: Number(e.target.value) } })}
-                  />
-                </div>
+          <div className="pt-4 space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-black/40">教室列数 (默认4)</label>
+                <input 
+                  type="number" min="1" max="10" 
+                  className="w-full p-2 bg-white rounded-lg text-xs font-medium focus:outline-none"
+                  value={group.splitConfig.columns || 4}
+                  onChange={(e) => onUpdate({ splitConfig: { ...group.splitConfig, columns: Number(e.target.value) } })}
+                />
               </div>
-              
-              <div className="text-xs text-black/20 text-center font-bold bg-black/5 py-2 rounded-lg">
-                单间总容量: {(group.splitConfig.columns || 4) * (group.splitConfig.rows || 8)} 人
+
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-black/40">每列人数 (默认8)</label>
+                <input 
+                  type="number" min="1" max="20" 
+                  className="w-full p-2 bg-white rounded-lg text-xs font-medium focus:outline-none"
+                  value={group.splitConfig.rows || 8}
+                  onChange={(e) => onUpdate({ splitConfig: { ...group.splitConfig, rows: Number(e.target.value) } })}
+                />
               </div>
             </div>
-          </details>
+            
+            <div className="text-xs text-black/20 text-center font-bold bg-black/5 py-2 rounded-lg">
+              单间总容量: {(group.splitConfig.columns || 4) * (group.splitConfig.rows || 8)} 人
+            </div>
+          </div>
 
           <div className="pt-3 border-t border-black/5 flex justify-between text-xs">
             <div className="flex flex-col">
@@ -1740,8 +1869,12 @@ const TeacherAssignCard = ({ group, teachers, totalLabs, onUpdate, checkConflict
             <Users size={20} />
           </div>
           <div>
-            <h3 className="text-xl font-bold">上课班级：{group.classNames.join(', ')}</h3>
-            <p className="text-black/40 text-sm font-medium">共 {group.totalStudents} 人 · {WEEKDAYS[group.time.weekday-1]} {group.time.session}{group.time.period}</p>
+            <h3 className="text-xl font-bold">课程名称：{group.courseName}</h3>
+            <h4 className="text-sm font-medium text-black/60 mt-1">上课班级：<span className="text-xs">{group.classNames.map((cn: string) => {
+              const count = group.students.filter((s: any) => s.className === cn).length;
+              return `${cn}(${count}人)`;
+            }).join(', ')}</span></h4>
+            <p className="text-black/40 text-[10px] font-medium mt-1">共 {group.totalStudents} 人 · {WEEKDAYS[group.time.weekday-1]} {group.time.session}{group.time.period}</p>
           </div>
         </div>
       </div>
