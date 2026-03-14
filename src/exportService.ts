@@ -35,7 +35,8 @@ const sortStudents = (students: Student[]) => {
  */
 const sanitizeSheetName = (name: string, suffix: string) => {
   const illegalChars = /[\\/?:*[\]]/g;
-  let cleanName = name.replace(illegalChars, '').trim();
+  let cleanName = (name || '未命名').replace(illegalChars, '').trim();
+  if (!cleanName) cleanName = '未命名';
   const maxLen = 31 - suffix.length;
   if (cleanName.length > maxLen) {
     cleanName = cleanName.substring(0, maxLen);
@@ -83,14 +84,18 @@ export const exportFullWorkbook = async (groups: CombinedClassGroup[], totalLabs
       countsByClass[s.className] = (countsByClass[s.className] || 0) + 1;
     });
     
-    const validClassNames = group.classNames.filter(name => name.trim() !== '');
-    const countsStr = validClassNames.map(name => countsByClass[name] || 0).join('+');
-    const classInfo = `${validClassNames.join(',')} ${countsStr}=${group.totalStudents}人`;
+    const validClassNames = (group.classNames || []).filter(name => name && name.trim() !== '');
+    const countsStr = validClassNames.length > 0 
+      ? validClassNames.map(name => countsByClass[name] || 0).join('+')
+      : '0';
+    const classInfo = validClassNames.length > 0
+      ? `${validClassNames.join(',')} ${countsStr}=${group.totalStudents || 0}人`
+      : `无班级信息 ${group.totalStudents || 0}人`;
     
     const rowData = [
-      `${group.time.startWeek || 1}-${group.time.endWeek || 16}周`,
+      `${group.time?.startWeek || 1}-${group.time?.endWeek || 16}周`,
       currentWeekday,
-      `${group.time.session || ''}${group.time.period || ''}`,
+      `${group.time?.session || '未知'}${group.time?.period || '未知节次'}`,
       group.courseName || '未命名课程',
       classInfo
     ];
@@ -146,8 +151,9 @@ export const exportFullWorkbook = async (groups: CombinedClassGroup[], totalLabs
 
     sheet2.mergeCells(`A${s2CurrentRow}:B${s2CurrentRow}`);
     const bHeader2 = sheet2.getCell(`A${s2CurrentRow}`);
-    const weekday = WEEKDAYS[group.time.weekday - 1] || '';
-    bHeader2.value = `上课时间：${group.time.startWeek}-${group.time.endWeek}周 ${weekday} ${group.time.session}${group.time.period}`;
+    const weekday = group.time?.weekday ? (WEEKDAYS[group.time.weekday - 1] || '') : '';
+    const timeStr = `${group.time?.startWeek || 1}-${group.time?.endWeek || 16}周 ${weekday} ${group.time?.session || ''}${group.time?.period || ''}`;
+    bHeader2.value = `上课时间：${timeStr.trim() || '未设置'}`;
     applyDefaultStyle(bHeader2);
     bHeader2.alignment = { horizontal: 'left', vertical: 'middle' };
     s2CurrentRow++;
@@ -178,9 +184,9 @@ export const exportFullWorkbook = async (groups: CombinedClassGroup[], totalLabs
       });
 
       const rangeTexts = Object.entries(studentsByClass).map(([className, list]) => {
-        const start = list[0]?.id || '无';
-        const end = list[list.length - 1]?.id || '无';
-        return `${className}：${start} —— ${end}`;
+        const start = list[0]?.id || '？';
+        const end = list[list.length - 1]?.id || '？';
+        return `${className || '未知班级'}：${start} —— ${end}`;
       });
 
       rangeCell.value = rangeTexts.length > 0 ? rangeTexts.join('\n') : '无学生数据';
@@ -272,8 +278,9 @@ export const exportFullWorkbook = async (groups: CombinedClassGroup[], totalLabs
         // Footer
         gradeSheet.mergeCells(gRow, 1, gRow, 14);
         const footer = gradeSheet.getCell(gRow, 1);
-        const weekday = WEEKDAYS[group.time.weekday - 1] || '';
-        footer.value = `上课时间：${group.time.startWeek}-${group.time.endWeek}周 ${weekday} ${group.time.session}${group.time.period}   带教教师：${assign.teacherName || '未分配'}`;
+        const weekday = group.time?.weekday ? (WEEKDAYS[group.time.weekday - 1] || '') : '';
+        const timeStr = `${group.time?.startWeek || 1}-${group.time?.endWeek || 16}周 ${weekday} ${group.time?.session || ''}${group.time?.period || ''}`;
+        footer.value = `上课时间：${timeStr.trim() || '未设置'}   带教教师：${assign.teacherName || '未分配'}`;
         applyDefaultStyle(footer);
         footer.alignment = { horizontal: 'left', vertical: 'middle' };
         gRow += 4; 
@@ -297,8 +304,9 @@ export const exportFullWorkbook = async (groups: CombinedClassGroup[], totalLabs
         // Header 1: Info
         seatSheet.mergeCells(`A${sRow}:K${sRow}`);
         const h1 = seatSheet.getCell(`A${sRow}`);
-        const weekday = WEEKDAYS[group.time.weekday - 1] || '';
-        h1.value = `${courseName} | ${assign.labName} | 教师：${assign.teacherName || '未分配'} | 时间：${group.time.startWeek}-${group.time.endWeek}周 ${weekday} ${group.time.session}${group.time.period}`;
+        const weekday = group.time?.weekday ? (WEEKDAYS[group.time.weekday - 1] || '') : '';
+        const timeStr = `${group.time?.startWeek || 1}-${group.time?.endWeek || 16}周 ${weekday} ${group.time?.session || ''}${group.time?.period || ''}`;
+        h1.value = `${courseName || '未命名课程'} | ${assign.labName || '未命名实验室'} | 教师：${assign.teacherName || '未分配'} | 时间：${timeStr.trim() || '未设置'}`;
         h1.font = { bold: true };
         applyDefaultStyle(h1);
         sRow++;

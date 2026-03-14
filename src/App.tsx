@@ -245,8 +245,8 @@ export default function App() {
             if (commonStudents.length > 0) {
               const studentNames = commonStudents.slice(0, 3).map(s => s.name).join('、');
               const suffix = commonStudents.length > 3 ? `等 ${commonStudents.length} 人` : '';
-              const timeInfo = `${g1.time.startWeek}-${g1.time.endWeek}周 ${WEEKDAYS[g1.time.weekday-1]} ${g1.time.session}${g1.time.period}`;
-              conflicts.push(`⚠️ 学生冲突：${studentNames}${suffix} 在 ${timeInfo} 同时被安排了 [${g1.courseName || '未命名课程'}] 和 [${g2.courseName || '未命名课程'}]`);
+              const timeInfo = `${g1.time?.startWeek || 1}-${g1.time?.endWeek || 16}周 ${WEEKDAYS[(g1.time?.weekday || 1)-1]} ${g1.time?.session || ''}${g1.time?.period || ''}`;
+              conflicts.push(`⚠️ 学生冲突：${studentNames || '未知学生'}${suffix} 在 ${timeInfo.trim() || '未知时间'} 同时被安排了 [${g1.courseName || '未命名课程'}] 和 [${g2.courseName || '未命名课程'}]`);
             }
           }
         }
@@ -278,7 +278,7 @@ export default function App() {
             if (totalUsed > totalLabs) {
               const timeStr = `${w}周 ${WEEKDAYS[d-1]} ${session}${p}节`;
               const courseNames = overlappingGroups.map(g => g.courseName || '未命名课程').join('、');
-              const conflictMsg = `⚠️ 实验室超限：${timeStr} 实验室总需求为 ${totalUsed} (上限 ${totalLabs})。涉及课程：${courseNames}`;
+              const conflictMsg = `⚠️ 实验室超限：${timeStr} 实验室总需求为 ${totalUsed} (上限 ${totalLabs})。涉及课程：${courseNames || '无'}`;
               if (!conflicts.includes(conflictMsg)) {
                 conflicts.push(conflictMsg);
               }
@@ -310,8 +310,9 @@ export default function App() {
       })).filter(s => s.id && s.name);
       setStudents(parsed);
       const uniqueClasses = new Set(parsed.map(s => s.className)).size;
-      setStudentSummary(`✅ 解析成功：共导入 ${parsed.length} 名学生，涉及 ${uniqueClasses} 个班级。`);
-      toast.success(`成功导入 ${parsed.length} 名学生，${uniqueClasses} 个班级`);
+      const studentCount = parsed.length;
+      setStudentSummary(`✅ 解析成功：共导入 ${studentCount} 名学生，涉及 ${uniqueClasses} 个班级。`);
+      toast.success(`成功导入 ${studentCount} 名学生，${uniqueClasses} 个班级`);
     };
     reader.readAsBinaryString(file);
   };
@@ -329,9 +330,10 @@ export default function App() {
       const firstRow = data[0] || [];
       const startIdx = (String(firstRow[0]).includes('姓名') || String(firstRow[0]).includes('教师')) ? 1 : 0;
       const parsed = data.slice(startIdx).flat().filter(Boolean).map(name => ({ name: String(name) }));
+      const teacherCount = parsed.length;
       setTeachers([...teachers, ...parsed]);
-      setTeacherSummary(`✅ 解析成功：共导入 ${parsed.length} 名教师。`);
-      toast.success(`成功导入 ${parsed.length} 名教师`);
+      setTeacherSummary(`✅ 解析成功：共导入 ${teacherCount} 名教师。`);
+      toast.success(`成功导入 ${teacherCount} 名教师`);
     };
     reader.readAsBinaryString(file);
   };
@@ -352,11 +354,12 @@ export default function App() {
         if (courseName) addCourse(courseName);
         return createGroupObject(courseName, classNames);
       }).filter(g => g.courseName);
+      const courseCount = new Set(newGroups.map(g => g.courseName)).size;
+      const groupCount = newGroups.length;
       setGroups([...groups, ...newGroups]);
       
-      const uniqueCourses = new Set(newGroups.map(g => g.courseName)).size;
-      setGroupSummary(`✅ 解析成功：共提取 ${uniqueCourses} 门课程，${newGroups.length} 个合班组。`);
-      toast.success(`成功导入 ${uniqueCourses} 门课程，${newGroups.length} 个合班组`);
+      setGroupSummary(`✅ 解析成功：共提取 ${courseCount} 门课程，${groupCount} 个合班组。`);
+      toast.success(`成功导入 ${courseCount} 门课程，${groupCount} 个合班组`);
       
       const allGroupClasses = Array.from(new Set(newGroups.flatMap(g => g.classNames)));
       const unassigned = allGroupClasses.filter(cn => !students.some(s => s.className === cn));
