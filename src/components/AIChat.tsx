@@ -180,6 +180,45 @@ export const AIChat = ({ onClose }: { onClose: () => void }) => {
 - 当前排课详情:
 ${groups.length > 0 ? groups.map(g => `[ID: ${g.id}] 课程: ${g.courseName} | 时间: ${g.time.startWeek}-${g.time.endWeek}周 ${WEEKDAYS[g.time.weekday-1]} ${g.time.session} ${g.time.period} | 班级: ${g.classNames.join(', ')} | 实验室数: ${g.splitConfig.numLabs} | 详情: (${g.assignments.map(a => `${a.labName}(${a.studentRange.count}人): ${a.teacherName || '未分配'}`).join(', ')})`).join('\n') : '暂无排课数据'}
 
+---
+全流程引导规范：
+
+你需要根据当前系统状态，主动判断下一步应该做什么，
+并引导用户按顺序完成以下六个阶段：
+
+阶段1 - 基础数据录入：
+  检查学生总数是否为0。如果是，提示用户上传学生名单 Excel，
+  或询问是否手动添加学生。
+
+阶段2 - 教师录入：
+  检查教师名单是否为空。如果是，询问用户有哪些带教教师，
+  用户回复后直接执行 batch_teachers 批量添加。
+
+阶段3 - 课程与合班设置：
+  检查合班组数是否为0。如果是，询问用户需要排哪些课程、
+  每门课涉及哪些班级，用户回复后执行 add_course。
+
+阶段4 - 上课时间设置：
+  检查是否有课程的时间还是默认值（周一上午1-4节）。
+  如果有，逐一询问每门课的上课时间，用户回复后执行 update_time。
+
+阶段5 - 实验室拆分与教师分配：
+  检查是否有课程的 assignments 为空或教师未分配。
+  如果有，询问每门课需要几个实验室、每间分配哪位教师，
+  用户回复后依次执行 update_split 和 update_teacher。
+
+阶段6 - 完成确认：
+  所有课程的教师都已分配后，告知用户排课已完成，
+  执行 jump_to_step 跳转到第6步预览结果。
+
+引导原则：
+- 每次只问一个问题，不要一次抛出所有问题
+- 用户回答后立即执行对应操作，执行完再问下一个问题
+- 如果用户主动发出指令，优先执行指令，不要打断
+- 如果用户说"继续"或"下一步"，自动推进到下一个未完成的阶段
+- 始终保持简洁，每条回复不超过3句话
+---
+
 你可以通过返回特定格式的 JSON 来调用函数修改系统设置。
 你可以执行的操作（请在回复中包含 JSON 代码块）：
 
@@ -221,6 +260,7 @@ AI 行为规范：
 - 执行完成后必须明确告知用户实际修改了哪些数据。
 - 如果用户指令涉及不存在的课程、教师或班级，应先列出当前存在的选项供用户确认。
 - reset_system 操作必须在用户明确二次确认后才能执行。
+- 每个实验室只能分配一位教师，为多个实验室分配不同教师时，必须为每个实验室分别发一个 update_teacher，labName 必须对应不同编号，例如实验室1、实验室2，不能重复。
 **重要：请务必将所有 JSON 动作放在 \`\`\`json 和 \`\`\` 代码块中。**
 
 回复格式要求：
@@ -438,9 +478,15 @@ AI 行为规范：
         }
       }
 
-      addAiMessage({ role: 'assistant', content: assistantMessage });
-      if (executedActions) {
-        addAiMessage({ role: 'assistant', content: '✅ 已根据指令更新系统设置。' });
+      const displayMessage = assistantMessage
+        .replace(/```json[\s\S]*?```/g, '')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+
+      addAiMessage({ role: 'assistant', content: displayMessage || '✅ 已根据指令更新系统设置。' });
+      if (executedActions && !displayMessage) {
+        // Only add this if there was no text response at all
+        // addAiMessage({ role: 'assistant', content: '✅ 已根据指令更新系统设置。' });
       }
     } catch (error: any) {
       addAiMessage({ role: 'assistant', content: `错误: ${error.message}` });
