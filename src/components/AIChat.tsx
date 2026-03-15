@@ -149,347 +149,235 @@ export const AIChat = ({ onClose }: { onClose: () => void }) => {
   const handleSend = async () => {
     const apiKey = aiApiKey;
     if (!input.trim() && attachments.length === 0) return;
-    if (!apiKey) {
-      setShowSettings(true);
-      return;
-    }
+    if (!apiKey) { setShowSettings(true); return; }
 
     const userMessageContent = input + (attachments.length > 0 ? `\n\n[附件: ${attachments.map(a => a.file.name).join(', ')}]` : '');
-    const userMessage = { role: 'user' as const, content: userMessageContent };
-    addAiMessage(userMessage);
-    
+    addAiMessage({ role: 'user', content: userMessageContent });
+
     const currentInput = input;
     const currentAttachments = [...attachments];
-    
     setInput('');
     setAttachments([]);
     setIsLoading(true);
 
-    try {
-      const WEEKDAYS = ['星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日'];
-      const classNames = Array.from(new Set(students.map(s => s.className)));
-      const systemInstruction = `你是一个实验室排课系统的智能助手。
-当前系统状态：
-- 步骤: ${step}
-- 学生总数: ${students.length}人
-- 班级列表: ${classNames.join(', ')}
-- 教师名单: ${teachers.length > 0 ? teachers.map(t => t.name).join(', ') : '暂无'}
-- 实验室总数: ${totalLabs}
-- 合班组数: ${groups.length}
-- 课程列表: ${courses.join(', ')}
-- 当前排课详情:
-${groups.length > 0 ? groups.map(g => `[ID: ${g.id}] 课程: ${g.courseName} | 时间: ${g.time.startWeek}-${g.time.endWeek}周 ${WEEKDAYS[g.time.weekday-1]} ${g.time.session} ${g.time.period} | 班级: ${g.classNames.join(', ')} | 实验室数: ${g.splitConfig.numLabs} | 详情: (${g.assignments.map(a => `${a.labName}(${a.studentRange.count}人): ${a.teacherName || '未分配'}`).join(', ')})`).join('\n') : '暂无排课数据'}
-
----
-全流程引导规范：
-
-你需要根据当前系统状态，主动判断下一步应该做什么，
-并引导用户按顺序完成以下六个阶段：
-
-阶段1 - 基础数据录入：
-  检查学生总数是否为0。如果是，提示用户上传学生名单 Excel，
-  或询问是否手动添加学生。
-
-阶段2 - 教师录入：
-  检查教师名单是否为空。如果是，询问用户有哪些带教教师，
-  用户回复后直接执行 batch_teachers 批量添加。
-
-阶段3 - 课程与合班设置：
-  检查合班组数是否为0。如果是，询问用户需要排哪些课程、
-  每门课涉及哪些班级，用户回复后执行 add_course。
-
-阶段4 - 上课时间设置：
-  检查是否有课程的时间还是默认值（周一上午1-4节）。
-  如果有，逐一询问每门课的上课时间，用户回复后执行 update_time。
-
-阶段5 - 实验室拆分与教师分配：
-  检查是否有课程的 assignments 为空或教师未分配。
-  如果有，询问每门课需要几个实验室、每间分配哪位教师，
-  用户回复后依次执行 update_split 和 update_teacher。
-
-阶段6 - 完成确认：
-  所有课程的教师都已分配后，告知用户排课已完成，
-  执行 jump_to_step 跳转到第6步预览结果。
-
-引导原则：
-- 每次只问一个问题，不要一次抛出所有问题
-- 用户回答后立即执行对应操作，执行完再问下一个问题
-- 如果用户主动发出指令，优先执行指令，不要打断
-- 如果用户说"继续"或"下一步"，自动推进到下一个未完成的阶段
-- 始终保持简洁，每条回复不超过3句话
----
-
-你可以通过返回特定格式的 JSON 来调用函数修改系统设置。
-你可以执行的操作（请在回复中包含 JSON 代码块）：
-
---- 学生管理 ---
-1. { "action": "add_student", "id": "...", "name": "...", "className": "...", "gender": "...", "major": "..." } - 添加单个学生
-2. { "action": "remove_student", "id": "..." } - 按学号删除学生
-3. { "action": "update_student", "id": "...", "name": "...", "className": "..." } - 修改学生信息
-
---- 教师管理 ---
-4. { "action": "add_teacher", "teacherName": "..." } - 添加单个教师
-5. { "action": "remove_teacher", "teacherName": "..." } - 删除指定教师
-6. { "action": "batch_teachers", "teacherNames": ["...", "..."] } - 批量添加教师
-
---- 课程与合班管理 ---
-7. { "action": "add_course", "courseName": "...", "classNames": ["班级1", "班级2"] } - 新增课程并关联班级
-8. { "action": "remove_course", "courseName": "..." } - 删除指定课程
-9. { "action": "update_course_classes", "courseName": "...", "classNames": ["班级1", "班级2"] } - 更新课程关联班级
-10. { "action": "rename_course", "oldName": "...", "newName": "..." } - 重命名课程
-
---- 上课时间管理 ---
-11. { "action": "update_time", "courseName": "...", "weekday": 1, "session": "上午", "period": "1-4节", "startWeek": 1, "endWeek": 16 } - 修改上课时间 (weekday: 1=周一 ~ 7=周日)
-
---- 实验室拆分与座位 ---
-12. { "action": "update_split", "courseName": "...", "numLabs": 2, "baseCapacity": 30 } - 修改实验室数量和基准人数
-13. { "action": "update_seating", "courseName": "...", "columns": 4, "rows": 8 } - 修改座位布局
-
---- 教师分配 ---
-14. { "action": "update_teacher", "courseName": "...", "labName": "实验室1", "teacherName": "..." } - 为指定实验室分配教师 (labName 格式: 实验室1, 实验室2...)
-15. { "action": "set_course_teachers", "courseName": "...", "teacherName": "..." } - 为某课程所有实验室统一设置教师
-16. { "action": "auto_assign_teachers", "courseName": "..." } - 自动轮流分配教师库中的教师
-
---- 系统控制 ---
-17. { "action": "jump_to_step", "step": 1-6 } - 跳转到特定步骤
-18. { "action": "update_total_labs", "count": 12 } - 更新实验室总数
-19. { "action": "reset_system" } - 重置整个系统 (执行前必须在回复中提示用户确认)
-
-AI 行为规范：
-- 可以在一次回复中返回多个 JSON 块来执行多个操作。
-- 执行完成后必须明确告知用户实际修改了哪些数据。
-- 如果用户指令涉及不存在的课程、教师或班级，应先列出当前存在的选项供用户确认。
-- reset_system 操作必须在用户明确二次确认后才能执行。
-- 每个实验室只能分配一位教师，为多个实验室分配不同教师时，必须为每个实验室分别发一个 update_teacher，labName 必须对应不同编号，例如实验室1、实验室2，不能重复。
-**重要：请务必将所有 JSON 动作放在 \`\`\`json 和 \`\`\` 代码块中。**
-
-回复格式要求：
-- 回复要简洁直接，不要用表格展示系统状态
-- 不要在每次回复开头问候用户或重复展示当前状态
-- 执行操作后只需简短说明做了什么，例如"已将张老师分配到实验室1"
-- 如果用户没有明确要求，不要主动列出所有可用功能
-- 不要在回复末尾加"请问你接下来想做什么"之类的引导语
-- 语气简洁专业，像一个执行指令的工具，而不是一个客服助手
-- 严禁在回复中输出任何代码片段、JSON 以外的代码块或技术实现细节，所有操作只通过 \`\`\`json \`\`\` 代码块执行，回复正文只用自然语言描述结果。`;
-
-      const messages = [
-        { role: 'system', content: systemInstruction },
-        ...aiMessages.map(m => ({ role: m.role, content: m.content })),
-        { role: 'user', content: currentInput + currentAttachments.map(a => a.content ? `\n\n文件内容 (${a.file.name}):\n${a.content}` : '').join('') }
-      ];
-
-      const response = await fetch(`${aiBaseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({
-          model: aiModel,
-          messages,
-          temperature: 0.7
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`API 请求失败: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      const assistantMessage = data.choices[0].message.content
+    const cleanContent = (text: string) =>
+      text
         .replace(/<think>[\s\S]*?<\/think>/g, '')
-        .trim();
-      
-      // Process potential JSON actions in the response
-      // Priority: Extract from ```json ... ``` blocks
-      const codeBlockMatch = assistantMessage.match(/```json\s*([\s\S]*?)\s*```/g);
-      const jsonMatch = assistantMessage.match(/\{[\s\S]*?\}/g);
-      let executedActions = false;
-
-      const processAction = (jsonStr: string) => {
-        try {
-          const action = JSON.parse(jsonStr);
-          if (action.action === 'update_teacher') {
-            const newGroups = groups.map(g => {
-              if (g.id === action.groupId || g.courseName === action.courseName) {
-                const newAssignments = g.assignments.map(a => {
-                  if (a.labName === action.labName) return { ...a, teacherName: action.teacherName };
-                  return a;
-                });
-                return { ...g, assignments: newAssignments };
-              }
-              return g;
-            });
-            setGroups(newGroups);
-            executedActions = true;
-          } else if (action.action === 'set_course_teachers') {
-            const newGroups = groups.map(g => {
-              if (g.id === action.groupId || g.courseName === action.courseName) {
-                const newAssignments = g.assignments.map(a => ({ ...a, teacherName: action.teacherName }));
-                return { ...g, assignments: newAssignments };
-              }
-              return g;
-            });
-            setGroups(newGroups);
-            executedActions = true;
-          } else if (action.action === 'auto_assign_teachers') {
-            const newGroups = groups.map(g => {
-              if (g.courseName === action.courseName) {
-                let teacherIdx = 0;
-                const newAssignments = g.assignments.map(a => {
-                  if (a.teacherName) return a;
-                  const teacher = teachers[teacherIdx % teachers.length];
-                  teacherIdx++;
-                  return { ...a, teacherName: teacher?.name || '' };
-                });
-                return { ...g, assignments: newAssignments };
-              }
-              return g;
-            });
-            setGroups(newGroups);
-            executedActions = true;
-          } else if (action.action === 'update_split') {
-            const newGroups = groups.map(g => {
-              if (g.id === action.groupId || g.courseName === action.courseName) {
-                return {
-                  ...g,
-                  splitConfig: {
-                    ...g.splitConfig,
-                    ...(action.numLabs !== undefined && { numLabs: action.numLabs }),
-                    ...(action.baseCapacity !== undefined && { baseCapacity: action.baseCapacity }),
-                  }
-                };
-              }
-              return g;
-            });
-            setGroups(newGroups);
-            executedActions = true;
-          } else if (action.action === 'update_seating') {
-            const newGroups = groups.map(g => {
-              if (g.courseName === action.courseName) {
-                return {
-                  ...g,
-                  splitConfig: {
-                    ...g.splitConfig,
-                    ...(action.columns !== undefined && { columns: action.columns }),
-                    ...(action.rows !== undefined && { rows: action.rows }),
-                  }
-                };
-              }
-              return g;
-            });
-            setGroups(newGroups);
-            executedActions = true;
-          } else if (action.action === 'update_time') {
-            const newGroups = groups.map(g => {
-              if (g.courseName === action.courseName) {
-                return {
-                  ...g,
-                  time: {
-                    ...g.time,
-                    ...(action.weekday !== undefined && { weekday: action.weekday }),
-                    ...(action.session !== undefined && { session: action.session as any }),
-                    ...(action.period !== undefined && { period: action.period }),
-                    ...(action.startWeek !== undefined && { startWeek: action.startWeek }),
-                    ...(action.endWeek !== undefined && { endWeek: action.endWeek }),
-                  }
-                };
-              }
-              return g;
-            });
-            setGroups(newGroups);
-            executedActions = true;
-          } else if (action.action === 'add_student') {
-            setStudents([...students, {
-              id: action.id,
-              name: action.name,
-              className: action.className,
-              gender: action.gender || '未知',
-              major: action.major || '未知'
-            }]);
-            executedActions = true;
-          } else if (action.action === 'remove_student') {
-            setStudents(students.filter(s => s.id !== action.id));
-            executedActions = true;
-          } else if (action.action === 'update_student') {
-            setStudents(students.map(s => s.id === action.id ? { ...s, ...action } : s));
-            executedActions = true;
-          } else if (action.action === 'add_teacher') {
-            if (!teachers.some(t => t.name === action.teacherName)) {
-              setTeachers([...teachers, { name: action.teacherName }]);
-              executedActions = true;
-            }
-          } else if (action.action === 'remove_teacher') {
-            setTeachers(teachers.filter(t => t.name !== action.teacherName));
-            executedActions = true;
-          } else if (action.action === 'batch_teachers') {
-            const existingNames = new Set(teachers.map(t => t.name));
-            const newTeachers = action.teacherNames
-              .filter((name: string) => !existingNames.has(name))
-              .map((name: string) => ({ name }));
-            setTeachers([...teachers, ...newTeachers]);
-            executedActions = true;
-          } else if (action.action === 'add_course') {
-            const newGroup = {
-              id: Math.random().toString(36).substring(2, 15),
-              courseName: action.courseName,
-              classNames: action.classNames || [],
-              totalStudents: 0,
-              students: [],
-              invalidClasses: [],
-              splitConfig: { numLabs: 1, baseCapacity: 32, columns: 4, rows: 8 },
-              time: { startWeek: 1, endWeek: 16, weekday: 1, session: '上午' as const, period: '1-4节' },
-              assignments: []
-            };
-            setGroups([...groups, newGroup]);
-            executedActions = true;
-          } else if (action.action === 'remove_course') {
-            setGroups(groups.filter(g => g.courseName !== action.courseName));
-            executedActions = true;
-          } else if (action.action === 'update_course_classes') {
-            setGroups(groups.map(g => g.courseName === action.courseName ? { ...g, classNames: action.classNames } : g));
-            executedActions = true;
-          } else if (action.action === 'rename_course') {
-            setGroups(groups.map(g => g.courseName === action.oldName ? { ...g, courseName: action.newName } : g));
-            executedActions = true;
-          } else if (action.action === 'jump_to_step') {
-            setStep(action.step);
-            executedActions = true;
-          } else if (action.action === 'update_total_labs') {
-            setTotalLabs(action.count);
-            executedActions = true;
-          } else if (action.action === 'reset_system') {
-            resetSystem();
-            executedActions = true;
-          }
-        } catch (e) {
-          // Not a valid action JSON, ignore
-        }
-      };
-
-      if (codeBlockMatch) {
-        for (const block of codeBlockMatch) {
-          const jsonStr = block.replace(/```json\s*|\s*```/g, '').trim();
-          processAction(jsonStr);
-        }
-      } else if (jsonMatch) {
-        for (const jsonStr of jsonMatch) {
-          processAction(jsonStr);
-        }
-      }
-
-      const displayMessage = assistantMessage
+        .replace(/<minimax:tool_call>[\s\S]*?<\/minimax:tool_call>/g, '')
         .replace(/```json[\s\S]*?```/g, '')
         .replace(/\n{3,}/g, '\n\n')
         .trim();
 
-      addAiMessage({ role: 'assistant', content: displayMessage || '✅ 已根据指令更新系统设置。' });
-      if (executedActions && !displayMessage) {
-        // Only add this if there was no text response at all
-        // addAiMessage({ role: 'assistant', content: '✅ 已根据指令更新系统设置。' });
+    const executeAction = (name: string, args: any): string => {
+      try {
+        if (name === 'update_teacher') {
+          setGroups(groups.map(g => g.courseName === args.courseName
+            ? { ...g, assignments: g.assignments.map(a => a.labName === args.labName ? { ...a, teacherName: args.teacherName } : a) }
+            : g
+          ));
+          return `已将${args.teacherName}分配到${args.courseName}的${args.labName}`;
+        }
+        if (name === 'set_course_teachers') {
+          setGroups(groups.map(g => g.courseName === args.courseName
+            ? { ...g, assignments: g.assignments.map(a => ({ ...a, teacherName: args.teacherName })) }
+            : g
+          ));
+          return `已将${args.courseName}所有实验室教师设为${args.teacherName}`;
+        }
+        if (name === 'auto_assign_teachers') {
+          let idx = 0;
+          setGroups(groups.map(g => g.courseName === args.courseName
+            ? { ...g, assignments: g.assignments.map(a => {
+                if (a.teacherName) return a;
+                const t = teachers[idx % teachers.length];
+                idx++;
+                return { ...a, teacherName: t?.name || '' };
+              })}
+            : g
+          ));
+          return `已自动分配${args.courseName}的教师`;
+        }
+        if (name === 'update_split') {
+          setGroups(groups.map(g => g.courseName === args.courseName
+            ? { ...g, splitConfig: { ...g.splitConfig,
+                ...(args.numLabs !== undefined && { numLabs: args.numLabs }),
+                ...(args.baseCapacity !== undefined && { baseCapacity: args.baseCapacity }),
+              }}
+            : g
+          ));
+          return `已更新${args.courseName}拆分：${args.numLabs ?? ''}个实验室，每间${args.baseCapacity ?? ''}人`;
+        }
+        if (name === 'update_seating') {
+          setGroups(groups.map(g => g.courseName === args.courseName
+            ? { ...g, splitConfig: { ...g.splitConfig,
+                ...(args.columns !== undefined && { columns: args.columns }),
+                ...(args.rows !== undefined && { rows: args.rows }),
+              }}
+            : g
+          ));
+          return `已更新${args.courseName}座位布局`;
+        }
+        if (name === 'update_time') {
+          setGroups(groups.map(g => g.courseName === args.courseName
+            ? { ...g, time: { ...g.time,
+                ...(args.weekday !== undefined && { weekday: args.weekday }),
+                ...(args.session !== undefined && { session: args.session }),
+                ...(args.period !== undefined && { period: args.period }),
+                ...(args.startWeek !== undefined && { startWeek: args.startWeek }),
+                ...(args.endWeek !== undefined && { endWeek: args.endWeek }),
+              }}
+            : g
+          ));
+          return `已更新${args.courseName}的上课时间`;
+        }
+        if (name === 'add_teacher') {
+          if (!teachers.some(t => t.name === args.teacherName)) {
+            setTeachers([...teachers, { name: args.teacherName }]);
+            return `已添加教师${args.teacherName}`;
+          }
+          return `教师${args.teacherName}已存在`;
+        }
+        if (name === 'remove_teacher') {
+          setTeachers(teachers.filter(t => t.name !== args.teacherName));
+          return `已删除教师${args.teacherName}`;
+        }
+        if (name === 'batch_teachers') {
+          const existing = new Set(teachers.map(t => t.name));
+          const added = (args.teacherNames as string[]).filter(n => !existing.has(n));
+          setTeachers([...teachers, ...added.map(n => ({ name: n }))]);
+          return `已批量添加教师：${added.join('、')}`;
+        }
+        if (name === 'add_course') {
+          setGroups([...groups, {
+            id: Math.random().toString(36).substring(2, 15),
+            courseName: args.courseName,
+            classNames: args.classNames || [],
+            totalStudents: 0, students: [], invalidClasses: [],
+            splitConfig: { numLabs: 1, baseCapacity: 32, columns: 4, rows: 8 },
+            time: { startWeek: 1, endWeek: 16, weekday: 1, session: '上午' as const, period: '1-4节' },
+            assignments: []
+          }]);
+          return `已添加课程${args.courseName}`;
+        }
+        if (name === 'remove_course') {
+          setGroups(groups.filter(g => g.courseName !== args.courseName));
+          return `已删除课程${args.courseName}`;
+        }
+        if (name === 'update_course_classes') {
+          setGroups(groups.map(g => g.courseName === args.courseName ? { ...g, classNames: args.classNames } : g));
+          return `已更新${args.courseName}的班级列表`;
+        }
+        if (name === 'rename_course') {
+          setGroups(groups.map(g => g.courseName === args.oldName ? { ...g, courseName: args.newName } : g));
+          return `已将${args.oldName}重命名为${args.newName}`;
+        }
+        if (name === 'add_student') {
+          setStudents([...students, { id: args.id, name: args.name, className: args.className, gender: args.gender || '', major: args.major || '' }]);
+          return `已添加学生${args.name}`;
+        }
+        if (name === 'remove_student') {
+          setStudents(students.filter(s => s.id !== args.id));
+          return `已删除学号${args.id}的学生`;
+        }
+        if (name === 'update_student') {
+          setStudents(students.map(s => s.id === args.id ? { ...s, ...args } : s));
+          return `已更新学生${args.id}的信息`;
+        }
+        if (name === 'jump_to_step') {
+          setStep(args.step);
+          return `已跳转到第${args.step}步`;
+        }
+        if (name === 'update_total_labs') {
+          setTotalLabs(args.count);
+          return `已更新实验室总数为${args.count}`;
+        }
+        if (name === 'reset_system') {
+          resetSystem();
+          return '系统已重置';
+        }
+        return '未知操作';
+      } catch (e: any) {
+        return `执行失败: ${e.message}`;
       }
+    };
+
+    const tools = [
+      { type: "function", function: { name: "update_teacher", description: "为指定课程的指定实验室分配教师", parameters: { type: "object", properties: { courseName: { type: "string" }, labName: { type: "string", description: "格式为实验室1、实验室2" }, teacherName: { type: "string" } }, required: ["courseName", "labName", "teacherName"] } } },
+      { type: "function", function: { name: "set_course_teachers", description: "为某课程所有实验室统一设置同一位教师", parameters: { type: "object", properties: { courseName: { type: "string" }, teacherName: { type: "string" } }, required: ["courseName", "teacherName"] } } },
+      { type: "function", function: { name: "auto_assign_teachers", description: "从教师库自动轮流分配教师给课程未分配的实验室", parameters: { type: "object", properties: { courseName: { type: "string" } }, required: ["courseName"] } } },
+      { type: "function", function: { name: "update_split", description: "修改课程的实验室数量和每间基准人数", parameters: { type: "object", properties: { courseName: { type: "string" }, numLabs: { type: "number" }, baseCapacity: { type: "number" } }, required: ["courseName"] } } },
+      { type: "function", function: { name: "update_time", description: "修改课程上课时间", parameters: { type: "object", properties: { courseName: { type: "string" }, weekday: { type: "number", description: "1=周一~7=周日" }, session: { type: "string", description: "上午或下午" }, period: { type: "string", description: "如1-4节、6-8节" }, startWeek: { type: "number" }, endWeek: { type: "number" } }, required: ["courseName"] } } },
+      { type: "function", function: { name: "update_seating", description: "修改座位布局", parameters: { type: "object", properties: { courseName: { type: "string" }, columns: { type: "number" }, rows: { type: "number" } }, required: ["courseName"] } } },
+      { type: "function", function: { name: "add_teacher", description: "添加单个教师", parameters: { type: "object", properties: { teacherName: { type: "string" } }, required: ["teacherName"] } } },
+      { type: "function", function: { name: "remove_teacher", description: "删除指定教师", parameters: { type: "object", properties: { teacherName: { type: "string" } }, required: ["teacherName"] } } },
+      { type: "function", function: { name: "batch_teachers", description: "批量添加多位教师", parameters: { type: "object", properties: { teacherNames: { type: "array", items: { type: "string" } } }, required: ["teacherNames"] } } },
+      { type: "function", function: { name: "add_course", description: "新增课程并关联班级", parameters: { type: "object", properties: { courseName: { type: "string" }, classNames: { type: "array", items: { type: "string" } } }, required: ["courseName"] } } },
+      { type: "function", function: { name: "remove_course", description: "删除指定课程", parameters: { type: "object", properties: { courseName: { type: "string" } }, required: ["courseName"] } } },
+      { type: "function", function: { name: "update_course_classes", description: "更新课程关联班级列表", parameters: { type: "object", properties: { courseName: { type: "string" }, classNames: { type: "array", items: { type: "string" } } }, required: ["courseName", "classNames"] } } },
+      { type: "function", function: { name: "rename_course", description: "重命名课程", parameters: { type: "object", properties: { oldName: { type: "string" }, newName: { type: "string" } }, required: ["oldName", "newName"] } } },
+      { type: "function", function: { name: "add_student", description: "添加单个学生", parameters: { type: "object", properties: { id: { type: "string" }, name: { type: "string" }, className: { type: "string" }, gender: { type: "string" }, major: { type: "string" } }, required: ["id", "name", "className"] } } },
+      { type: "function", function: { name: "remove_student", description: "按学号删除学生", parameters: { type: "object", properties: { id: { type: "string" } }, required: ["id"] } } },
+      { type: "function", function: { name: "update_student", description: "按学号修改学生信息", parameters: { type: "object", properties: { id: { type: "string" }, name: { type: "string" }, className: { type: "string" } }, required: ["id"] } } },
+      { type: "function", function: { name: "jump_to_step", description: "跳转到指定步骤1-6", parameters: { type: "object", properties: { step: { type: "number" } }, required: ["step"] } } },
+      { type: "function", function: { name: "update_total_labs", description: "更新系统实验室总数", parameters: { type: "object", properties: { count: { type: "number" } }, required: ["count"] } } },
+      { type: "function", function: { name: "reset_system", description: "重置整个系统，需用户二次确认后才能调用", parameters: { type: "object", properties: {} } } },
+    ];
+
+    try {
+      const WEEKDAYS = ['星期一','星期二','星期三','星期四','星期五','星期六','星期日'];
+      const classNames = Array.from(new Set(students.map(s => s.className)));
+      const systemInstruction = `你是实验室排课系统的智能助手。
+当前状态：步骤${step} | 学生${students.length}人 | 班级：${classNames.join('、') || '无'} | 教师：${teachers.map(t => t.name).join('、') || '无'} | 实验室总数：${totalLabs} | 课程：${groups.map(g => `${g.courseName}(实验室数:${g.splitConfig.numLabs},教师:${g.assignments.map(a => a.teacherName || '未分配').join('/')})`).join('；') || '无'}
+
+全流程引导：根据当前状态判断下一步，按顺序引导完成：
+1.学生为0→提示上传名单或手动添加
+2.教师为空→询问有哪些带教教师
+3.课程为0→询问需要排哪些课程和班级
+4.有课程时间未设置→逐一确认上课时间
+5.有课程教师未分配→询问实验室数量和各实验室教师
+6.全部完成→告知完成并跳转第6步
+
+规范：每次只问一个问题；用户回答后立即调用对应工具执行；用户主动发指令则优先执行；回复不超过2句话，简洁专业。`;
+
+      const messages: any[] = [
+        { role: 'system', content: systemInstruction },
+        ...aiMessages.map(m => ({ role: m.role, content: m.content })),
+        { role: 'user', content: currentInput + currentAttachments.map(a => a.content ? `\n\n文件内容(${a.file.name}):\n${a.content}` : '').join('') }
+      ];
+
+      const res1 = await fetch(`${aiBaseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+        body: JSON.stringify({ model: aiModel, messages, tools, tool_choice: "auto", temperature: 0.7 })
+      });
+      if (!res1.ok) throw new Error(`API错误: ${res1.status} ${await res1.text()}`);
+
+      const data1 = await res1.json();
+      const msg1 = data1.choices[0].message;
+
+      if (msg1.tool_calls && msg1.tool_calls.length > 0) {
+        messages.push(msg1);
+        for (const tc of msg1.tool_calls) {
+          const args = JSON.parse(tc.function.arguments);
+          const result = executeAction(tc.function.name, args);
+          messages.push({ role: 'tool', tool_call_id: tc.id, content: result });
+        }
+        const res2 = await fetch(`${aiBaseUrl}/chat/completions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+          body: JSON.stringify({ model: aiModel, messages, temperature: 0.7 })
+        });
+        if (!res2.ok) throw new Error(`API错误: ${res2.status}`);
+        const data2 = await res2.json();
+        const finalText = data2.choices[0].message.content || '';
+        addAiMessage({ role: 'assistant', content: cleanContent(finalText) });
+      } else {
+        const text = msg1.content || '';
+        addAiMessage({ role: 'assistant', content: cleanContent(text) });
+      }
+
     } catch (error: any) {
-      addAiMessage({ role: 'assistant', content: `错误: ${error.message}` });
+      addAiMessage({ role: 'assistant', content: cleanContent(`错误: ${error.message}`) });
     } finally {
       setIsLoading(false);
     }
