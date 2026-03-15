@@ -409,9 +409,12 @@ export default function App() {
   const calculateAssignments = useCallback((group: CombinedClassGroup): LabAssignment[] => {
     const assignments: LabAssignment[] = [];
     let currentIdx = 0;
+    // 优先使用 group.splitConfig.baseCapacity，若未设置或为0则回退到默认逻辑
+    const baseCap = group.splitConfig.baseCapacity || Math.min(32, group.totalStudents || 32);
+    
     for (let i = 0; i < group.splitConfig.numLabs; i++) {
       const isLast = i === group.splitConfig.numLabs - 1;
-      const count = isLast ? (group.totalStudents - currentIdx) : group.splitConfig.baseCapacity;
+      const count = isLast ? (group.totalStudents - currentIdx) : baseCap;
       const slice = group.students.slice(currentIdx, currentIdx + count);
       assignments.push({
         labName: `实验室${i + 1}`,
@@ -433,7 +436,8 @@ export default function App() {
     const needsUpdate = groups.some(g => 
       g.assignments.length > 0 && (
         g.assignments.length !== g.splitConfig.numLabs || 
-        g.assignments.reduce((sum, a) => sum + a.studentRange.count, 0) !== g.totalStudents
+        g.assignments.reduce((sum, a) => sum + a.studentRange.count, 0) !== g.totalStudents ||
+        (g.splitConfig.numLabs > 1 && g.assignments[0].studentRange.count !== g.splitConfig.baseCapacity)
       )
     );
 
