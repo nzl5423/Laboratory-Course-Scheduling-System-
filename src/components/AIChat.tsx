@@ -160,6 +160,20 @@ export const AIChat = ({ onClose }: { onClose: () => void }) => {
     setAttachments([]);
     setIsLoading(true);
 
+    const fetchWithTimeout = async (url: string, options: any, timeout = 30000) => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeout);
+      try {
+        const res = await fetch(url, { ...options, signal: controller.signal });
+        clearTimeout(timer);
+        return res;
+      } catch (e: any) {
+        clearTimeout(timer);
+        if (e.name === 'AbortError') throw new Error('请求超时，请检查网络或更换模型');
+        throw e;
+      }
+    };
+
     const cleanContent = (text: string) =>
       text
         .replace(/<think>[\s\S]*?<\/think>/g, '')
@@ -345,35 +359,43 @@ export const AIChat = ({ onClose }: { onClose: () => void }) => {
         { role: 'user', content: currentInput + currentAttachments.map(a => a.content ? `\n\n文件内容(${a.file.name}):\n${a.content}` : '').join('') }
       ];
 
-      const res1 = await fetch(`${aiBaseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-        body: JSON.stringify({ model: aiModel, messages, tools, tool_choice: "auto", temperature: 0.7 })
-      });
-      if (!res1.ok) throw new Error(`API错误: ${res1.status} ${await res1.text()}`);
+      let loopMessages = [...messages];
+      let maxRounds = 3;
+      let round = 0;
 
-      const data1 = await res1.json();
-      const msg1 = data1.choices[0].message;
-
-      if (msg1.tool_calls && msg1.tool_calls.length > 0) {
-        messages.push(msg1);
-        for (const tc of msg1.tool_calls) {
-          const args = JSON.parse(tc.function.arguments);
-          const result = executeAction(tc.function.name, args);
-          messages.push({ role: 'tool', tool_call_id: tc.id, content: result });
-        }
-        const res2 = await fetch(`${aiBaseUrl}/chat/completions`, {
+      while (round < maxRounds) {
+        const res = await fetchWithTimeout(`${aiBaseUrl}/chat/completions`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-          body: JSON.stringify({ model: aiModel, messages, temperature: 0.7 })
+          body: JSON.stringify({
+            model: aiModel,
+            messages: loopMessages,
+            tools,
+            tool_choice: "auto",
+            temperature: 0.7
+          })
         });
-        if (!res2.ok) throw new Error(`API错误: ${res2.status}`);
-        const data2 = await res2.json();
-        const finalText = data2.choices[0].message.content || '';
-        addAiMessage({ role: 'assistant', content: cleanContent(finalText) });
-      } else {
-        const text = msg1.content || '';
-        addAiMessage({ role: 'assistant', content: cleanContent(text) });
+        if (!res.ok) throw new Error(`API错误: ${res.status} ${await res.text()}`);
+        const data = await res.json();
+        const msg = data.choices[0].message;
+
+        if (msg.tool_calls && msg.tool_calls.length > 0) {
+          loopMessages.push(msg);
+          for (const tc of msg.tool_calls) {
+            const args = JSON.parse(tc.function.arguments);
+            const result = executeAction(tc.function.name, args);
+            loopMessages.push({ role: 'tool', tool_call_id: tc.id, content: result });
+          }
+          round++;
+        } else {
+          addAiMessage({ role: 'assistant', content: cleanContent(msg.content || '') });
+          break;
+        }
+
+        if (round >= maxRounds) {
+          addAiMessage({ role: 'assistant', content: '已执行多步操作，请确认结果是否符合预期。' });
+          break;
+        }
       }
 
     } catch (error: any) {
